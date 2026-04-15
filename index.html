@@ -25,6 +25,7 @@
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%}
 body{background:var(--bg);color:var(--text);font-family:'Geist',system-ui,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit}
 .ambient{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
 .ambient::before{content:'';position:absolute;top:-30%;left:-10%;width:60%;height:70%;background:radial-gradient(ellipse,rgba(200,240,110,0.04) 0%,transparent 65%);animation:d1 18s ease-in-out infinite alternate}
 .ambient::after{content:'';position:absolute;bottom:-20%;right:-15%;width:55%;height:65%;background:radial-gradient(ellipse,rgba(74,158,255,0.04) 0%,transparent 65%);animation:d2 22s ease-in-out infinite alternate}
@@ -38,7 +39,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 2
 .logo-word em{font-style:italic;color:var(--accent)}
 .logo-sup{font-family:'Geist Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:0.12em;text-transform:uppercase;margin-left:6px;align-self:flex-end;margin-bottom:2px}
 .header-right{display:flex;align-items:center;gap:12px}
-.lang-selector{display:flex;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:3px}
+.lang-selector{display:flex;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:3px;flex-wrap:wrap}
 .lang-btn{background:none;border:none;color:var(--text2);font-family:'Geist Mono',monospace;font-size:10px;padding:4px 9px;border-radius:5px;cursor:pointer;transition:all .15s;letter-spacing:.04em}
 .lang-btn.active{background:var(--accent);color:#0a0f00;font-weight:600}
 .lang-btn:hover:not(.active){color:var(--text);background:var(--surface2)}
@@ -107,6 +108,9 @@ textarea::placeholder{color:var(--text3)}
 .chev{position:relative;width:12px;height:7px}
 .chev::before{content:'';position:absolute;left:0;top:0;width:7px;height:2px;background:var(--text2);transform:rotate(45deg);transform-origin:right center;border-radius:1px}
 .chev::after{content:'';position:absolute;right:0;top:0;width:7px;height:2px;background:var(--text2);transform:rotate(-45deg);transform-origin:left center;border-radius:1px}
+.sources-list{margin-top:14px;padding-top:10px;border-top:1px solid var(--border)}
+.sources-list a{color:var(--accent);text-decoration:none;word-break:break-word}
+.sources-list a:hover{text-decoration:underline}
 @media(max-width:960px){.scroll-btn{right:16px}}
 @media(max-width:640px){
   header{padding:0 16px;height:54px}
@@ -130,81 +134,83 @@ textarea::placeholder{color:var(--text3)}
 <body>
 <div class="ambient"></div>
 <div class="grid-bg"></div>
-<div class="shell">
 
-<header>
-  <a class="logo" href="#">
-    <span class="logo-word">Urban<em>AI</em></span>
-    <span class="logo-sup">by Link Comunica</span>
-  </a>
-  <div class="header-right">
-    <div class="status-dot" id="statusText">En línea</div>
-    <div class="lang-selector" id="langSelector">
-      <button class="lang-btn active" data-lang="es">ES</button>
-      <button class="lang-btn" data-lang="en">EN</button>
-      <button class="lang-btn" data-lang="pt">PT</button>
-      <button class="lang-btn" data-lang="fr">FR</button>
-      <button class="lang-btn" data-lang="zh">中文</button>
+<div class="shell">
+  <header>
+    <a class="logo" href="#">
+      <span class="logo-word">Urban<em>AI</em></span>
+      <span class="logo-sup">by Link Comunica</span>
+    </a>
+    <div class="header-right">
+      <div class="status-dot" id="statusText">En línea</div>
+      <div class="lang-selector" id="langSelector">
+        <button class="lang-btn active" data-lang="es">ES</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="pt">PT</button>
+        <button class="lang-btn" data-lang="fr">FR</button>
+        <button class="lang-btn" data-lang="nl">NL</button>
+        <button class="lang-btn" data-lang="zh">中文</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="hero" id="hero">
+    <p class="hero-eyebrow" id="heroEyebrow">Inteligencia Urbana · Global</p>
+    <h1 class="hero-title" id="heroTitle">Todo lo que necesitas saber sobre la <em>ciudad</em></h1>
+    <p class="hero-sub" id="heroSub">Consulta sobre urbanismo, vivienda, usos de suelo, patrimonio y transporte en cualquier país del mundo.</p>
+    <div class="domains">
+      <span class="domain-pill" id="t1">Urbanismo</span>
+      <span class="domain-pill" id="t2">Vivienda Social</span>
+      <span class="domain-pill" id="t3">Usos de Suelo</span>
+      <span class="domain-pill" id="t4">Patrimonio</span>
+      <span class="domain-pill" id="t5">Transporte</span>
+      <span class="domain-pill" id="t6">Normativas</span>
+    </div>
+    <div class="suggestions">
+      <button class="suggestion" onclick="useSuggestion(this)">
+        <div class="s-label" id="sl1">Vivienda</div>
+        <div class="s-text" id="ss1">¿Cuál es el déficit habitacional en América Latina y qué políticas existen para reducirlo?</div>
+      </button>
+      <button class="suggestion" onclick="useSuggestion(this)">
+        <div class="s-label" id="sl2">Urbanismo</div>
+        <div class="s-text" id="ss2">¿Qué es la zonificación inclusiva y cómo se aplica en ciudades europeas?</div>
+      </button>
+      <button class="suggestion" onclick="useSuggestion(this)">
+        <div class="s-label" id="sl3">Patrimonio</div>
+        <div class="s-text" id="ss3">¿Cómo se protege el patrimonio urbano en ciudades históricas de América Latina?</div>
+      </button>
+      <button class="suggestion" onclick="useSuggestion(this)">
+        <div class="s-label" id="sl4">Transporte</div>
+        <div class="s-text" id="ss4">¿Cuáles son las mejores prácticas globales de movilidad urbana sostenible?</div>
+      </button>
     </div>
   </div>
-</header>
 
-<div class="hero" id="hero">
-  <p class="hero-eyebrow" id="heroEyebrow">Inteligencia Urbana · Global</p>
-  <h1 class="hero-title" id="heroTitle">Todo lo que necesitas saber sobre la <em>ciudad</em></h1>
-  <p class="hero-sub" id="heroSub">Consulta sobre urbanismo, vivienda, usos de suelo, patrimonio y transporte en cualquier país del mundo.</p>
-  <div class="domains">
-    <span class="domain-pill" id="t1">Urbanismo</span>
-    <span class="domain-pill" id="t2">Vivienda Social</span>
-    <span class="domain-pill" id="t3">Usos de Suelo</span>
-    <span class="domain-pill" id="t4">Patrimonio</span>
-    <span class="domain-pill" id="t5">Transporte</span>
-    <span class="domain-pill" id="t6">Normativas</span>
-  </div>
-  <div class="suggestions">
-    <button class="suggestion" onclick="useSuggestion(this)">
-      <div class="s-label" id="sl1">Vivienda</div>
-      <div class="s-text" id="ss1">¿Cuál es el déficit habitacional en América Latina y qué políticas existen para reducirlo?</div>
-    </button>
-    <button class="suggestion" onclick="useSuggestion(this)">
-      <div class="s-label" id="sl2">Urbanismo</div>
-      <div class="s-text" id="ss2">¿Qué es la zonificación inclusiva y cómo se aplica en ciudades europeas?</div>
-    </button>
-    <button class="suggestion" onclick="useSuggestion(this)">
-      <div class="s-label" id="sl3">Patrimonio</div>
-      <div class="s-text" id="ss3">¿Cómo se protege el patrimonio urbano en ciudades históricas de América Latina?</div>
-    </button>
-    <button class="suggestion" onclick="useSuggestion(this)">
-      <div class="s-label" id="sl4">Transporte</div>
-      <div class="s-text" id="ss4">¿Cuáles son las mejores prácticas globales de movilidad urbana sostenible?</div>
-    </button>
-  </div>
-</div>
+  <div class="chat" id="chatContainer"></div>
 
-<div class="chat" id="chatContainer"></div>
+  <div class="input-zone">
+    <div class="domain-strip">
+      <span class="ds-tag" style="background:rgba(200,240,110,0.07);color:rgba(200,240,110,0.55)" id="dt1">Urbanismo</span>
+      <span class="ds-tag" style="background:rgba(74,158,255,0.07);color:rgba(74,158,255,0.55)" id="dt2">Vivienda</span>
+      <span class="ds-tag" style="background:rgba(255,140,80,0.07);color:rgba(255,140,80,0.55)" id="dt3">Usos de Suelo</span>
+      <span class="ds-tag" style="background:rgba(180,130,255,0.07);color:rgba(180,130,255,0.55)" id="dt4">Patrimonio</span>
+      <span class="ds-tag" style="background:rgba(255,200,60,0.07);color:rgba(255,200,60,0.55)" id="dt5">Transporte</span>
+    </div>
 
-<div class="input-zone">
-  <div class="domain-strip">
-    <span class="ds-tag" style="background:rgba(200,240,110,0.07);color:rgba(200,240,110,0.55)" id="dt1">Urbanismo</span>
-    <span class="ds-tag" style="background:rgba(74,158,255,0.07);color:rgba(74,158,255,0.55)" id="dt2">Vivienda</span>
-    <span class="ds-tag" style="background:rgba(255,140,80,0.07);color:rgba(255,140,80,0.55)" id="dt3">Usos de Suelo</span>
-    <span class="ds-tag" style="background:rgba(180,130,255,0.07);color:rgba(180,130,255,0.55)" id="dt4">Patrimonio</span>
-    <span class="ds-tag" style="background:rgba(255,200,60,0.07);color:rgba(255,200,60,0.55)" id="dt5">Transporte</span>
-  </div>
-  <div class="input-box">
-    <textarea id="userInput" rows="1"
-      placeholder="Pregunta sobre urbanismo, vivienda, suelo, patrimonio o transporte..."
-      onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-      <div class="send-arrow"></div>
-    </button>
-  </div>
-  <div class="input-meta">
-    <span class="meta-left" id="footerLeft">urbanai.io</span>
-    <span class="meta-right" id="footerRight">Enter para enviar · Shift+Enter nueva línea</span>
-  </div>
-</div>
+    <div class="input-box">
+      <textarea id="userInput" rows="1"
+        placeholder="Pregunta sobre urbanismo, vivienda, suelo, patrimonio o transporte..."
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+        <div class="send-arrow"></div>
+      </button>
+    </div>
 
+    <div class="input-meta">
+      <span class="meta-left" id="footerLeft">urbanai.io</span>
+      <span class="meta-right" id="footerRight">Enter para enviar · Shift+Enter nueva línea</span>
+    </div>
+  </div>
 </div>
 
 <button class="scroll-btn" id="scrollBtn" onclick="scrollToBottom()">
@@ -212,20 +218,317 @@ textarea::placeholder{color:var(--text3)}
 </button>
 
 <script>
-const i18n={es:{eyebrow:'Inteligencia Urbana · Global',heroTitle:'Todo lo que necesitas saber sobre la <em>ciudad</em>',heroSub:'Consulta sobre urbanismo, vivienda, usos de suelo, patrimonio y transporte en cualquier país del mundo.',t1:'Urbanismo',t2:'Vivienda Social',t3:'Usos de Suelo',t4:'Patrimonio',t5:'Transporte',t6:'Normativas',dt1:'Urbanismo',dt2:'Vivienda',dt3:'Usos de Suelo',dt4:'Patrimonio',dt5:'Transporte',sl1:'Vivienda',ss1:'¿Cuál es el déficit habitacional en América Latina y qué políticas existen para reducirlo?',sl2:'Urbanismo',ss2:'¿Qué es la zonificación inclusiva y cómo se aplica en ciudades europeas?',sl3:'Patrimonio',ss3:'¿Cómo se protege el patrimonio urbano en ciudades históricas de América Latina?',sl4:'Transporte',ss4:'¿Cuáles son las mejores prácticas globales de movilidad urbana sostenible?',placeholder:'Pregunta sobre urbanismo, vivienda, suelo, patrimonio o transporte...',footerLeft:'urbanai.io',footerRight:'Enter para enviar · Shift+Enter nueva línea',status:'En línea',you:'Tú',ai:'UA'},en:{eyebrow:'Urban Intelligence · Global',heroTitle:'Everything you need to know about the <em>city</em>',heroSub:'Ask about urbanism, housing, land use, heritage and transport in any country worldwide.',t1:'Urbanism',t2:'Social Housing',t3:'Land Use',t4:'Heritage',t5:'Transport',t6:'Regulations',dt1:'Urbanism',dt2:'Housing',dt3:'Land Use',dt4:'Heritage',dt5:'Transport',sl1:'Housing',ss1:'What is the global housing deficit and what policies exist to address it?',sl2:'Urbanism',ss2:'What is inclusive zoning and how is it applied in European cities?',sl3:'Heritage',ss3:'How is urban heritage protected in Latin American historic cities?',sl4:'Transport',ss4:'What are the best global practices for sustainable urban mobility?',placeholder:'Ask about urbanism, housing, land use, heritage or transport...',footerLeft:'urbanai.io',footerRight:'Enter to send · Shift+Enter new line',status:'Online',you:'You',ai:'UA'},pt:{eyebrow:'Inteligência Urbana · Global',heroTitle:'Tudo que você precisa saber sobre a <em>cidade</em>',heroSub:'Consulte sobre urbanismo, habitação, uso do solo, patrimônio e transporte em qualquer país do mundo.',t1:'Urbanismo',t2:'Habitação Social',t3:'Uso do Solo',t4:'Patrimônio',t5:'Transporte',t6:'Normas',dt1:'Urbanismo',dt2:'Habitação',dt3:'Uso do Solo',dt4:'Patrimônio',dt5:'Transporte',sl1:'Habitação',ss1:'Qual é o déficit habitacional na América Latina e quais políticas existem?',sl2:'Urbanismo',ss2:'O que é zoneamento inclusivo e como é aplicado em cidades europeias?',sl3:'Patrimônio',ss3:'Como o patrimônio urbano é protegido em cidades históricas?',sl4:'Transporte',ss4:'Quais são as melhores práticas globais de mobilidade urbana sustentável?',placeholder:'Pergunte sobre urbanismo, habitação, uso do solo, patrimônio ou transporte...',footerLeft:'urbanai.io',footerRight:'Enter para enviar · Shift+Enter nova linha',status:'Online',you:'Você',ai:'UA'},fr:{eyebrow:"Intelligence Urbaine · Mondiale",heroTitle:"Tout ce que vous devez savoir sur la <em>ville</em>",heroSub:"Posez des questions sur l'urbanisme, le logement, l'usage des sols, le patrimoine et les transports dans n'importe quel pays.",t1:'Urbanisme',t2:'Logement Social',t3:'Usage des Sols',t4:'Patrimoine',t5:'Transport',t6:'Réglementations',dt1:'Urbanisme',dt2:'Logement',dt3:'Usage des Sols',dt4:'Patrimoine',dt5:'Transport',sl1:'Logement',ss1:'Quel est le déficit de logements en Amérique latine et quelles politiques existent?',sl2:'Urbanisme',ss2:"Qu'est-ce que le zonage inclusif et comment s'applique-t-il dans les villes européennes?",sl3:'Patrimoine',ss3:'Comment le patrimoine urbain est-il protégé dans les villes historiques?',sl4:'Transport',ss4:'Quelles sont les meilleures pratiques mondiales de mobilité urbaine durable?',placeholder:"Posez une question sur l'urbanisme, le logement, les sols, le patrimoine ou les transports...",footerLeft:'urbanai.io',footerRight:'Entrée pour envoyer · Shift+Entrée nouvelle ligne',status:'En ligne',you:'Vous',ai:'UA'},zh:{eyebrow:'全球城市智能',heroTitle:'关于<em>城市</em>，你需要知道的一切',heroSub:'咨询全球任何国家的城市规划、住房、土地使用、遗产保护和交通问题。',t1:'城市规划',t2:'社会住房',t3:'土地使用',t4:'文化遗产',t5:'交通运输',t6:'法规政策',dt1:'城市规划',dt2:'住房',dt3:'土地使用',dt4:'文化遗产',dt5:'交通',sl1:'住房',ss1:'拉丁美洲的住房短缺问题及应对政策是什么？',sl2:'城市规划',ss2:'什么是包容性分区？它如何在欧洲城市中应用？',sl3:'遗产',ss3:'历史城市如何保护城市遗产？',sl4:'交通',ss4:'全球可持续城市交通的最佳实践有哪些？',placeholder:'询问城市规划、住房、土地使用、遗产或交通问题...',footerLeft:'urbanai.io',footerRight:'Enter发送 · Shift+Enter换行',status:'在线',you:'您',ai:'UA'}};
-let currentLang='es',messages=[],isLoading=false;
-function setLang(l){currentLang=l;const t=i18n[l];document.getElementById('heroEyebrow').textContent=t.eyebrow;document.getElementById('heroTitle').innerHTML=t.heroTitle;document.getElementById('heroSub').textContent=t.heroSub;['t1','t2','t3','t4','t5','t6','dt1','dt2','dt3','dt4','dt5','sl1','sl2','sl3','sl4','ss1','ss2','ss3','ss4'].forEach(k=>{const e=document.getElementById(k);if(e)e.textContent=t[k]||''});document.getElementById('userInput').placeholder=t.placeholder;document.getElementById('footerLeft').textContent=t.footerLeft;document.getElementById('footerRight').textContent=t.footerRight;const st=document.getElementById('statusText');if(st)st.textContent=t.status;document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===l))}
-document.getElementById('langSelector').addEventListener('click',e=>{if(e.target.dataset.lang)setLang(e.target.dataset.lang)});
-function useSuggestion(btn){const text=btn.querySelector('[id^="ss"]').textContent;document.getElementById('userInput').value=text;sendMessage()}
-function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,130)+'px'}
-function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}}
-function scrollToBottom(){const c=document.getElementById('chatContainer');c.scrollTop=c.scrollHeight}
-function addMessage(role,content){const t=i18n[currentLang];const c=document.getElementById('chatContainer');const d=document.createElement('div');d.className=`msg ${role}`;const label=role==='ai'?(t.ai||'UA'):(t.you||'You')[0];d.innerHTML=`<div class="msg-avatar ${role}">${label}</div><div class="msg-bubble">${formatContent(content)}</div>`;c.appendChild(d);scrollToBottom();return d}
-function formatContent(text){return text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>').replace(/^### (.*)/gm,'<span class="mh3">$1</span>').replace(/^## (.*)/gm,'<span class="mh2">$1</span>').replace(/^- (.*)/gm,'· $1').replace(/\n/g,'<br>')}
-function showTyping(){const c=document.getElementById('chatContainer');const d=document.createElement('div');d.className='msg ai';d.id='typing';d.innerHTML='<div class="msg-avatar ai">UA</div><div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>';c.appendChild(d);scrollToBottom()}
-function removeTyping(){const t=document.getElementById('typing');if(t)t.remove()}
-async function sendMessage(){if(isLoading)return;const input=document.getElementById('userInput');const text=input.value.trim();if(!text)return;document.getElementById('hero').classList.add('hidden');document.getElementById('chatContainer').classList.add('visible');input.value='';input.style.height='auto';messages.push({role:'user',content:text});addMessage('user',text);isLoading=true;document.getElementById('sendBtn').disabled=true;showTyping();try{const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages})});const data=await res.json();removeTyping();const reply=data.content?.[0]?.text||'Error al obtener respuesta.';messages.push({role:'assistant',content:reply});addMessage('ai',reply)}catch{removeTyping();addMessage('ai','Error de conexión. Por favor intenta nuevamente.')}isLoading=false;document.getElementById('sendBtn').disabled=false;input.focus()}
-document.getElementById('chatContainer').addEventListener('scroll',function(){const btn=document.getElementById('scrollBtn');const near=this.scrollHeight-this.scrollTop-this.clientHeight<100;btn.classList.toggle('visible',!near&&this.scrollTop>100)});
+const i18n = {
+  es:{
+    eyebrow:'Inteligencia Urbana · Global',
+    heroTitle:'Todo lo que necesitas saber sobre la <em>ciudad</em>',
+    heroSub:'Consulta sobre urbanismo, vivienda, usos de suelo, patrimonio y transporte en cualquier país del mundo.',
+    t1:'Urbanismo',t2:'Vivienda Social',t3:'Usos de Suelo',t4:'Patrimonio',t5:'Transporte',t6:'Normativas',
+    dt1:'Urbanismo',dt2:'Vivienda',dt3:'Usos de Suelo',dt4:'Patrimonio',dt5:'Transporte',
+    sl1:'Vivienda',ss1:'¿Cuál es el déficit habitacional en América Latina y qué políticas existen para reducirlo?',
+    sl2:'Urbanismo',ss2:'¿Qué es la zonificación inclusiva y cómo se aplica en ciudades europeas?',
+    sl3:'Patrimonio',ss3:'¿Cómo se protege el patrimonio urbano en ciudades históricas de América Latina?',
+    sl4:'Transporte',ss4:'¿Cuáles son las mejores prácticas globales de movilidad urbana sostenible?',
+    placeholder:'Pregunta sobre urbanismo, vivienda, suelo, patrimonio o transporte...',
+    footerLeft:'urbanai.io',
+    footerRight:'Enter para enviar · Shift+Enter nueva línea',
+    status:'En línea',
+    you:'Tú',
+    ai:'UA',
+    connectionError:'Error de conexión. Por favor intenta nuevamente.',
+    responseError:'Error al obtener respuesta.',
+    sources:'Fuentes'
+  },
+  en:{
+    eyebrow:'Urban Intelligence · Global',
+    heroTitle:'Everything you need to know about the <em>city</em>',
+    heroSub:'Ask about urbanism, housing, land use, heritage and transport in any country worldwide.',
+    t1:'Urbanism',t2:'Social Housing',t3:'Land Use',t4:'Heritage',t5:'Transport',t6:'Regulations',
+    dt1:'Urbanism',dt2:'Housing',dt3:'Land Use',dt4:'Heritage',dt5:'Transport',
+    sl1:'Housing',ss1:'What is the global housing deficit and what policies exist to address it?',
+    sl2:'Urbanism',ss2:'What is inclusive zoning and how is it applied in European cities?',
+    sl3:'Heritage',ss3:'How is urban heritage protected in Latin American historic cities?',
+    sl4:'Transport',ss4:'What are the best global practices for sustainable urban mobility?',
+    placeholder:'Ask about urbanism, housing, land use, heritage or transport...',
+    footerLeft:'urbanai.io',
+    footerRight:'Enter to send · Shift+Enter new line',
+    status:'Online',
+    you:'You',
+    ai:'UA',
+    connectionError:'Connection error. Please try again.',
+    responseError:'Could not get a response.',
+    sources:'Sources'
+  },
+  pt:{
+    eyebrow:'Inteligência Urbana · Global',
+    heroTitle:'Tudo que você precisa saber sobre a <em>cidade</em>',
+    heroSub:'Consulte sobre urbanismo, habitação, uso do solo, patrimônio e transporte em qualquer país do mundo.',
+    t1:'Urbanismo',t2:'Habitação Social',t3:'Uso do Solo',t4:'Patrimônio',t5:'Transporte',t6:'Normas',
+    dt1:'Urbanismo',dt2:'Habitação',dt3:'Uso do Solo',dt4:'Patrimônio',dt5:'Transporte',
+    sl1:'Habitação',ss1:'Qual é o déficit habitacional na América Latina e quais políticas existem?',
+    sl2:'Urbanismo',ss2:'O que é zoneamento inclusivo e como é aplicado em cidades europeias?',
+    sl3:'Patrimônio',ss3:'Como o patrimônio urbano é protegido em cidades históricas?',
+    sl4:'Transporte',ss4:'Quais são as melhores práticas globais de mobilidade urbana sustentável?',
+    placeholder:'Pergunte sobre urbanismo, habitação, uso do solo, patrimônio ou transporte...',
+    footerLeft:'urbanai.io',
+    footerRight:'Enter para enviar · Shift+Enter nova linha',
+    status:'Online',
+    you:'Você',
+    ai:'UA',
+    connectionError:'Erro de conexão. Tente novamente.',
+    responseError:'Erro ao obter resposta.',
+    sources:'Fontes'
+  },
+  fr:{
+    eyebrow:'Intelligence Urbaine · Mondiale',
+    heroTitle:'Tout ce que vous devez savoir sur la <em>ville</em>',
+    heroSub:'Posez des questions sur l\'urbanisme, le logement, l\'usage des sols, le patrimoine et les transports dans n\'importe quel pays.',
+    t1:'Urbanisme',t2:'Logement Social',t3:'Usage des Sols',t4:'Patrimoine',t5:'Transport',t6:'Réglementations',
+    dt1:'Urbanisme',dt2:'Logement',dt3:'Usage des Sols',dt4:'Patrimoine',dt5:'Transport',
+    sl1:'Logement',ss1:'Quel est le déficit de logements en Amérique latine et quelles politiques existent?',
+    sl2:'Urbanisme',ss2:'Qu\'est-ce que le zonage inclusif et comment s\'applique-t-il dans les villes européennes?',
+    sl3:'Patrimoine',ss3:'Comment le patrimoine urbain est-il protégé dans les villes historiques?',
+    sl4:'Transport',ss4:'Quelles sont les meilleures pratiques mondiales de mobilité urbaine durable?',
+    placeholder:'Posez une question sur l\'urbanisme, le logement, les sols, le patrimoine ou les transports...',
+    footerLeft:'urbanai.io',
+    footerRight:'Entrée pour envoyer · Shift+Entrée nouvelle ligne',
+    status:'En ligne',
+    you:'Vous',
+    ai:'UA',
+    connectionError:'Erreur de connexion. Veuillez réessayer.',
+    responseError:'Erreur lors de la réponse.',
+    sources:'Sources'
+  },
+  nl:{
+    eyebrow:'Stedelijke Intelligentie · Wereldwijd',
+    heroTitle:'Alles wat je moet weten over de <em>stad</em>',
+    heroSub:'Stel vragen over stedenbouw, wonen, grondgebruik, erfgoed en vervoer in elk land ter wereld.',
+    t1:'Stedenbouw',t2:'Sociale Huisvesting',t3:'Grondgebruik',t4:'Erfgoed',t5:'Vervoer',t6:'Regelgeving',
+    dt1:'Stedenbouw',dt2:'Wonen',dt3:'Grondgebruik',dt4:'Erfgoed',dt5:'Vervoer',
+    sl1:'Wonen',ss1:'Wat is het woningtekort in Latijns-Amerika en welk beleid bestaat om het te verminderen?',
+    sl2:'Stedenbouw',ss2:'Wat is inclusieve zonering en hoe wordt die toegepast in Europese steden?',
+    sl3:'Erfgoed',ss3:'Hoe wordt stedelijk erfgoed beschermd in historische steden van Latijns-Amerika?',
+    sl4:'Vervoer',ss4:'Wat zijn de beste wereldwijde praktijken voor duurzame stedelijke mobiliteit?',
+    placeholder:'Vraag over stedenbouw, wonen, grondgebruik, erfgoed of vervoer...',
+    footerLeft:'urbanai.io',
+    footerRight:'Enter om te verzenden · Shift+Enter nieuwe regel',
+    status:'Online',
+    you:'Jij',
+    ai:'UA',
+    connectionError:'Verbindingsfout. Probeer het opnieuw.',
+    responseError:'Kon geen antwoord ophalen.',
+    sources:'Bronnen'
+  },
+  zh:{
+    eyebrow:'全球城市智能',
+    heroTitle:'关于<em>城市</em>，你需要知道的一切',
+    heroSub:'咨询全球任何国家的城市规划、住房、土地使用、遗产保护和交通问题。',
+    t1:'城市规划',t2:'社会住房',t3:'土地使用',t4:'文化遗产',t5:'交通运输',t6:'法规政策',
+    dt1:'城市规划',dt2:'住房',dt3:'土地使用',dt4:'文化遗产',dt5:'交通',
+    sl1:'住房',ss1:'拉丁美洲的住房短缺问题及应对政策是什么？',
+    sl2:'城市规划',ss2:'什么是包容性分区？它如何在欧洲城市中应用？',
+    sl3:'遗产',ss3:'历史城市如何保护城市遗产？',
+    sl4:'交通',ss4:'全球可持续城市交通的最佳实践有哪些？',
+    placeholder:'询问城市规划、住房、土地使用、遗产或交通问题...',
+    footerLeft:'urbanai.io',
+    footerRight:'Enter发送 · Shift+Enter换行',
+    status:'在线',
+    you:'您',
+    ai:'UA',
+    connectionError:'连接错误，请重试。',
+    responseError:'获取回答时出错。',
+    sources:'来源'
+  }
+};
+
+let currentLang = 'es';
+let messages = [];
+let isLoading = false;
+
+function setLang(l){
+  currentLang = l;
+  const t = i18n[l];
+
+  document.getElementById('heroEyebrow').textContent = t.eyebrow;
+  document.getElementById('heroTitle').innerHTML = t.heroTitle;
+  document.getElementById('heroSub').textContent = t.heroSub;
+
+  ['t1','t2','t3','t4','t5','t6','dt1','dt2','dt3','dt4','dt5','sl1','sl2','sl3','sl4','ss1','ss2','ss3','ss4'].forEach(k=>{
+    const e=document.getElementById(k);
+    if(e) e.textContent = t[k] || '';
+  });
+
+  document.getElementById('userInput').placeholder = t.placeholder;
+  document.getElementById('footerLeft').textContent = t.footerLeft;
+  document.getElementById('footerRight').textContent = t.footerRight;
+  document.getElementById('statusText').textContent = t.status;
+
+  document.querySelectorAll('.lang-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.lang === l);
+  });
+}
+
+document.getElementById('langSelector').addEventListener('click', e => {
+  if (e.target.dataset.lang) setLang(e.target.dataset.lang);
+});
+
+function useSuggestion(btn){
+  const text = btn.querySelector('[id^="ss"]').textContent;
+  document.getElementById('userInput').value = text;
+  sendMessage();
+}
+
+function autoResize(el){
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight,130) + 'px';
+}
+
+function handleKey(e){
+  if(e.key === 'Enter' && !e.shiftKey){
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function scrollToBottom(){
+  const c = document.getElementById('chatContainer');
+  c.scrollTop = c.scrollHeight;
+}
+
+function formatContent(text){
+  return String(text)
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g,'<em>$1</em>')
+    .replace(/^### (.*)/gm,'<span class="mh3">$1</span>')
+    .replace(/^## (.*)/gm,'<span class="mh2">$1</span>')
+    .replace(/^- (.*)/gm,'· $1')
+    .replace(/\n/g,'<br>');
+}
+
+function addMessage(role, content){
+  const t = i18n[currentLang];
+  const c = document.getElementById('chatContainer');
+  const d = document.createElement('div');
+  d.className = `msg ${role}`;
+  const label = role === 'ai' ? (t.ai || 'UA') : ((t.you || 'You')[0]);
+  d.innerHTML = `<div class="msg-avatar ${role}">${label}</div><div class="msg-bubble">${formatContent(content)}</div>`;
+  c.appendChild(d);
+  scrollToBottom();
+  return d;
+}
+
+function addSources(sources){
+  if (!Array.isArray(sources) || !sources.length) return;
+
+  const t = i18n[currentLang];
+  const c = document.getElementById('chatContainer');
+  const d = document.createElement('div');
+  d.className = 'msg ai';
+
+  const links = sources.map(s => {
+    const title = s.title || s.url || 'Source';
+    const url = s.url || '#';
+    return `<div style="margin-top:6px"><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></div>`;
+  }).join('');
+
+  d.innerHTML = `
+    <div class="msg-avatar ai">UA</div>
+    <div class="msg-bubble">
+      <span class="mh3">${t.sources}</span>
+      <div class="sources-list">${links}</div>
+    </div>
+  `;
+
+  c.appendChild(d);
+  scrollToBottom();
+}
+
+function showTyping(){
+  const c = document.getElementById('chatContainer');
+  const d = document.createElement('div');
+  d.className = 'msg ai';
+  d.id = 'typing';
+  d.innerHTML = '<div class="msg-avatar ai">UA</div><div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+  c.appendChild(d);
+  scrollToBottom();
+}
+
+function removeTyping(){
+  const t = document.getElementById('typing');
+  if(t) t.remove();
+}
+
+async function sendMessage(){
+  if (isLoading) return;
+
+  const input = document.getElementById('userInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  document.getElementById('hero').classList.add('hidden');
+  document.getElementById('chatContainer').classList.add('visible');
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  messages.push({ role: 'user', content: text });
+  addMessage('user', text);
+
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+  showTyping();
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages })
+    });
+
+    const data = await res.json();
+    removeTyping();
+
+    if (!res.ok) {
+      console.error('API error:', data);
+      addMessage('ai', data?.error || i18n[currentLang].responseError);
+      isLoading = false;
+      document.getElementById('sendBtn').disabled = false;
+      input.focus();
+      return;
+    }
+
+    const reply =
+      (typeof data.text === 'string' && data.text.trim()) ||
+      (Array.isArray(data.content)
+        ? data.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim()
+        : '') ||
+      i18n[currentLang].responseError;
+
+    messages.push({ role: 'assistant', content: reply });
+    addMessage('ai', reply);
+
+    if (Array.isArray(data.sources) && data.sources.length > 0) {
+      addSources(data.sources);
+    }
+
+  } catch (err) {
+    console.error(err);
+    removeTyping();
+    addMessage('ai', i18n[currentLang].connectionError);
+  }
+
+  isLoading = false;
+  document.getElementById('sendBtn').disabled = false;
+  input.focus();
+}
+
+document.getElementById('chatContainer').addEventListener('scroll', function(){
+  const btn = document.getElementById('scrollBtn');
+  const near = this.scrollHeight - this.scrollTop - this.clientHeight < 100;
+  btn.classList.toggle('visible', !near && this.scrollTop > 100);
+});
+
+setLang('es');
 </script>
 </body>
 </html>
