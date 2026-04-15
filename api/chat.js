@@ -1,7 +1,7 @@
 // =============================================================================
 // UrbanAI — API Route for Vercel Edge Runtime
 // Developed for Link Comunica (linkcomunica.com)
-// v3.0 — Agentic loop: handles web_search tool_use cycles automatically
+// v3.1 — Server tool fix: web_search uses pause_turn, not manual tool_result
 // =============================================================================
 
 export const config = { runtime: 'edge' };
@@ -15,7 +15,7 @@ const ANTHROPIC_URL     = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const MODEL             = 'claude-sonnet-4-20250514';
 const MAX_TOKENS        = 1500;
-const MAX_TOOL_ROUNDS   = 5; // safety cap on search iterations
+const MAX_TOOL_ROUNDS   = 8; // safety cap on search iterations
 
 // ---------------------------------------------------------------------------
 // System Prompt
@@ -111,7 +111,6 @@ Be precise, strategic, and actionable.
 
 // ---------------------------------------------------------------------------
 // World Bank population data fetcher (ISO2 country code)
-// Returns [{ year, population }] or null on any failure
 // ---------------------------------------------------------------------------
 async function getWorldBankData(countryCode) {
   try {
@@ -145,7 +144,7 @@ async function callAnthropic(messages) {
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: SYSTEM_PROMPT,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
       messages,
     }),
   });
@@ -163,15 +162,18 @@ async function callAnthropic(messages) {
 }
 
 // ---------------------------------------------------------------------------
-// Agentic loop
+// Agentic loop — CORRECT handling for web_search server tool
 //
-// Anthropic's web_search works like this:
-//   1. Model returns stop_reason="tool_use" with tool_use blocks inside content
-//   2. The TOOL ITSELF executes the search internally (no manual execution needed)
-//   3. We append the assistant's full content as-is, then send a tool_result
-//      message so the model can continue and produce the final text answer
+// web_search is a SERVER TOOL — Anthropic executes it internally.
+// The response content already contains both the tool_use block AND the
+// web_search_tool_result block. You must NOT send manual tool_result messages.
 //
-// This loop runs until stop_reason="end_turn" or MAX_TOOL_ROUNDS is reached.
+// The correct pattern:
+//   1. Call API → get response
+//   2. If stop_reason === 'pause_turn' OR 'tool_use':
+//      - Append { role: 'assistant', content: response.content } to messages
+//      - Call API again with updated messages (NO extra user tool_result needed)
+//   3. If stop_reason === 'end_turn' → done, return final text
 // ---------------------------------------------------------------------------
 async function runAgenticLoop(initialMessages) {
   let messages = [...initialMessages];
@@ -184,62 +186,32 @@ async function runAgenticLoop(initialMessages) {
 
     const { stop_reason, content } = response;
 
-    // Collect any text blocks accumulated so far
-    // (sometimes partial text appears before tool_use blocks)
+    // Collect sources from any web_search_tool_result blocks in this response
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
+          for (const r of block.content) {
+            if (r.url) {
+              allSources.push({ title: r.title || r.url, url: r.url });
+            }
+          }
+        }
+      }
+    }
 
+    // Final answer — done
     if (stop_reason === 'end_turn') {
-      // Final answer — we are done
       break;
     }
 
-    if (stop_reason === 'tool_use') {
-      // Find all tool_use blocks in this response
-      const toolUseBlocks = content.filter((b) => b.type === 'tool_use');
-
-      if (toolUseBlocks.length === 0) break; // safety: no tool blocks, exit
-
-      // Append the full assistant message (with tool_use blocks) to history
+    // pause_turn or tool_use with server tools:
+    // Append the full assistant response and call again — NO manual tool_result
+    if (stop_reason === 'pause_turn' || stop_reason === 'tool_use') {
       messages.push({ role: 'assistant', content });
-
-      // Build tool_result blocks for each tool_use
-      // For web_search, Anthropic executes the search internally and the results
-      // are already embedded in the content as web_search_tool_result blocks.
-      // We need to acknowledge each tool_use with a tool_result so the model
-      // can proceed. Extract search results if present in the content.
-      const toolResults = toolUseBlocks.map((toolBlock) => {
-        // Find matching web_search_tool_result for this tool_use id
-        const resultBlock = content.find(
-          (b) => b.type === 'web_search_tool_result' && b.tool_use_id === toolBlock.id
-        );
-
-        if (resultBlock) {
-          // Collect sources for the final response metadata
-          if (Array.isArray(resultBlock.content)) {
-            resultBlock.content.forEach((r) => {
-              if (r.url) allSources.push({ title: r.title || r.url, url: r.url });
-            });
-          }
-          return {
-            type: 'tool_result',
-            tool_use_id: toolBlock.id,
-            content: resultBlock.content,
-          };
-        }
-
-        // No result block found — return empty result so model can continue
-        return {
-          type: 'tool_result',
-          tool_use_id: toolBlock.id,
-          content: [],
-        };
-      });
-
-      // Append tool results as a user message and continue the loop
-      messages.push({ role: 'user', content: toolResults });
       continue;
     }
 
-    // Any other stop_reason (max_tokens, stop_sequence) — exit loop
+    // Any other stop reason (max_tokens, stop_sequence, refusal) — exit
     break;
   }
 
@@ -371,9 +343,9 @@ export default async function handler(req) {
     role:         lastResponse.role,
     stop_reason:  lastResponse.stop_reason,
     usage:        lastResponse.usage,
-    content:      lastResponse.content,  // full blocks for advanced clients
-    text,                                 // assembled final answer text
-    sources:      allSources,             // web sources used
+    content:      lastResponse.content,
+    text,
+    sources:      allSources,
     worldBankData: worldBankData ?? null,
   });
 }
