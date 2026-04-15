@@ -1,22 +1,24 @@
 // =============================================================================
 // UrbanAI — API Route for Vercel Edge Runtime
 // Developed for Link Comunica (linkcomunica.com)
+// v3.0 — Agentic loop: handles web_search tool_use cycles automatically
 // =============================================================================
 
 export const config = { runtime: 'edge' };
 
 // ---------------------------------------------------------------------------
-// Environment
+// Environment & constants
 // ---------------------------------------------------------------------------
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
+const ALLOWED_ORIGIN    = process.env.ALLOWED_ORIGIN || '*';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_URL     = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
-const MODEL = 'claude-sonnet-4-20250514';
-const MAX_TOKENS = 1500;
+const MODEL             = 'claude-sonnet-4-20250514';
+const MAX_TOKENS        = 1500;
+const MAX_TOOL_ROUNDS   = 5; // safety cap on search iterations
 
 // ---------------------------------------------------------------------------
-// System Prompt — UrbanAI full identity and behavior rules
+// System Prompt
 // ---------------------------------------------------------------------------
 const SYSTEM_PROMPT = `
 You are UrbanAI, an elite global territorial intelligence system developed by Link Comunica (linkcomunica.com).
@@ -61,7 +63,7 @@ DATA INTELLIGENCE:
 - If exact data is uncertain, use ranges and say "order of magnitude"
 - Never invent precise fake numbers
 - Combine data + expert reasoning
-- When you need to verify current data, URLs, institutional websites, or recent regulations, USE your web search capability. Always search before saying you do not know a URL or current fact.
+- When you need to verify current data, URLs, institutional websites, or recent regulations, USE your web search tool. Always search before saying you do not know a URL or current fact.
 
 CHILE PRIORITY:
 You must be highly competent in Chile:
@@ -93,7 +95,7 @@ When relevant, structure answers like:
 WEB SEARCH RULES:
 - Always use web search to verify: institutional websites, current URLs, recent legislation, current market data, active programs, recent news about urban projects.
 - Never say "I cannot verify" or "I do not have access to real-time data" — search first, then answer.
-- After searching, synthesize the result into a structured, expert-level response. Do not paste raw search results.
+- After searching, synthesize results into a structured expert-level response. Do not paste raw search results.
 
 FINAL OUTPUT REQUIREMENT (MANDATORY):
 Every answer MUST end with a Conclusion block in the user's language:
@@ -108,9 +110,8 @@ Be precise, strategic, and actionable.
 `.trim();
 
 // ---------------------------------------------------------------------------
-// World Bank Data Fetcher
-// Fetches last 5 years of population data for a given ISO2 country code
-// Returns a clean array: [{ year, population }] or null on failure
+// World Bank population data fetcher (ISO2 country code)
+// Returns [{ year, population }] or null on any failure
 // ---------------------------------------------------------------------------
 async function getWorldBankData(countryCode) {
   try {
@@ -118,7 +119,6 @@ async function getWorldBankData(countryCode) {
     const res = await fetch(url);
     if (!res.ok) return null;
     const raw = await res.json();
-    // World Bank returns [metadata, dataArray]
     if (!Array.isArray(raw) || raw.length < 2) return null;
     const entries = raw[1];
     if (!Array.isArray(entries) || entries.length === 0) return null;
@@ -131,20 +131,144 @@ async function getWorldBankData(countryCode) {
 }
 
 // ---------------------------------------------------------------------------
-// CORS Headers
+// Single Anthropic API call
 // ---------------------------------------------------------------------------
-function corsHeaders(extra = {}) {
+async function callAnthropic(messages) {
+  const res = await fetch(ANTHROPIC_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
+      system: SYSTEM_PROMPT,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages,
+    }),
+  });
+
+  if (!res.ok) {
+    let detail = '';
+    try { const e = await res.json(); detail = e?.error?.message || JSON.stringify(e); }
+    catch { detail = await res.text(); }
+    const err = new Error(`Anthropic API error ${res.status}: ${detail}`);
+    err.status = res.status;
+    throw err;
+  }
+
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Agentic loop
+//
+// Anthropic's web_search works like this:
+//   1. Model returns stop_reason="tool_use" with tool_use blocks inside content
+//   2. The TOOL ITSELF executes the search internally (no manual execution needed)
+//   3. We append the assistant's full content as-is, then send a tool_result
+//      message so the model can continue and produce the final text answer
+//
+// This loop runs until stop_reason="end_turn" or MAX_TOOL_ROUNDS is reached.
+// ---------------------------------------------------------------------------
+async function runAgenticLoop(initialMessages) {
+  let messages = [...initialMessages];
+  let lastResponse = null;
+  const allSources = [];
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const response = await callAnthropic(messages);
+    lastResponse = response;
+
+    const { stop_reason, content } = response;
+
+    // Collect any text blocks accumulated so far
+    // (sometimes partial text appears before tool_use blocks)
+
+    if (stop_reason === 'end_turn') {
+      // Final answer — we are done
+      break;
+    }
+
+    if (stop_reason === 'tool_use') {
+      // Find all tool_use blocks in this response
+      const toolUseBlocks = content.filter((b) => b.type === 'tool_use');
+
+      if (toolUseBlocks.length === 0) break; // safety: no tool blocks, exit
+
+      // Append the full assistant message (with tool_use blocks) to history
+      messages.push({ role: 'assistant', content });
+
+      // Build tool_result blocks for each tool_use
+      // For web_search, Anthropic executes the search internally and the results
+      // are already embedded in the content as web_search_tool_result blocks.
+      // We need to acknowledge each tool_use with a tool_result so the model
+      // can proceed. Extract search results if present in the content.
+      const toolResults = toolUseBlocks.map((toolBlock) => {
+        // Find matching web_search_tool_result for this tool_use id
+        const resultBlock = content.find(
+          (b) => b.type === 'web_search_tool_result' && b.tool_use_id === toolBlock.id
+        );
+
+        if (resultBlock) {
+          // Collect sources for the final response metadata
+          if (Array.isArray(resultBlock.content)) {
+            resultBlock.content.forEach((r) => {
+              if (r.url) allSources.push({ title: r.title || r.url, url: r.url });
+            });
+          }
+          return {
+            type: 'tool_result',
+            tool_use_id: toolBlock.id,
+            content: resultBlock.content,
+          };
+        }
+
+        // No result block found — return empty result so model can continue
+        return {
+          type: 'tool_result',
+          tool_use_id: toolBlock.id,
+          content: [],
+        };
+      });
+
+      // Append tool results as a user message and continue the loop
+      messages.push({ role: 'user', content: toolResults });
+      continue;
+    }
+
+    // Any other stop_reason (max_tokens, stop_sequence) — exit loop
+    break;
+  }
+
+  return { lastResponse, allSources };
+}
+
+// ---------------------------------------------------------------------------
+// Extract all text blocks from a response's content array
+// ---------------------------------------------------------------------------
+function extractText(content) {
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n')
+    .trim();
+}
+
+// ---------------------------------------------------------------------------
+// Helpers: CORS, JSON responses, message validation
+// ---------------------------------------------------------------------------
+function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    ...extra,
   };
 }
 
-// ---------------------------------------------------------------------------
-// JSON Response Helper
-// ---------------------------------------------------------------------------
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -152,41 +276,6 @@ function jsonResponse(body, status = 200) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Extract assembled text from Anthropic response content blocks
-// Handles text blocks and ignores tool_use / tool_result blocks.
-// Also returns a `sources` array if web_search_result blocks are present.
-// ---------------------------------------------------------------------------
-function parseAnthropicResponse(data) {
-  if (!data || !Array.isArray(data.content)) {
-    return { text: '', sources: [] };
-  }
-
-  const textBlocks = data.content
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text)
-    .join('\n')
-    .trim();
-
-  // Collect any cited web sources returned by the search tool
-  const sources = data.content
-    .filter((b) => b.type === 'tool_result')
-    .flatMap((b) => {
-      try {
-        const parsed = typeof b.content === 'string' ? JSON.parse(b.content) : b.content;
-        return Array.isArray(parsed) ? parsed.map((r) => ({ title: r.title, url: r.url })) : [];
-      } catch {
-        return [];
-      }
-    });
-
-  return { text: textBlocks, sources };
-}
-
-// ---------------------------------------------------------------------------
-// Validate messages array
-// Each item must be { role: 'user'|'assistant', content: string }
-// ---------------------------------------------------------------------------
 function validateMessages(messages) {
   if (!Array.isArray(messages) || messages.length === 0) return false;
   return messages.every(
@@ -216,11 +305,11 @@ export default async function handler(req) {
 
   // API key guard
   if (!ANTHROPIC_API_KEY) {
-    console.error('[UrbanAI] ANTHROPIC_API_KEY is not configured');
+    console.error('[UrbanAI] Missing ANTHROPIC_API_KEY');
     return jsonResponse({ error: 'Server configuration error: missing API key' }, 500);
   }
 
-  // Parse request body
+  // Parse body
   let body;
   try {
     body = await req.json();
@@ -233,28 +322,24 @@ export default async function handler(req) {
   // Validate messages
   if (!validateMessages(messages)) {
     return jsonResponse(
-      {
-        error:
-          'Invalid messages: must be a non-empty array of { role: "user"|"assistant", content: string }',
-      },
+      { error: 'Invalid messages: non-empty array of { role: "user"|"assistant", content: string } required' },
       400
     );
   }
 
-  // Fetch World Bank enrichment (silent — failure does not block the request)
+  // World Bank enrichment (non-blocking)
   let worldBankData = null;
   if (country && typeof country === 'string' && country.trim().length >= 2) {
     worldBankData = await getWorldBankData(country.trim().toUpperCase());
   }
 
   // Build enriched message list
-  // World Bank context injected as a silent user/assistant pair before the conversation
   const enrichedMessages = [
     ...(worldBankData
       ? [
           {
             role: 'user',
-            content: `[BACKGROUND CONTEXT — do not reference this directly in your answer unless it adds analytical value] World Bank population data for "${country}": ${JSON.stringify(worldBankData)}.`,
+            content: `[BACKGROUND CONTEXT — use only if analytically relevant] World Bank population data for "${country}": ${JSON.stringify(worldBankData)}.`,
           },
           {
             role: 'assistant',
@@ -265,76 +350,30 @@ export default async function handler(req) {
     ...messages,
   ];
 
-  // Call Anthropic API
-  let anthropicRes;
+  // Run agentic loop
+  let lastResponse, allSources;
   try {
-    anthropicRes = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        system: SYSTEM_PROMPT,
-        tools: [
-          {
-            type: 'web_search_20250305',
-            name: 'web_search',
-          },
-        ],
-        messages: enrichedMessages,
-      }),
-    });
-  } catch (networkErr) {
-    console.error('[UrbanAI] Network error reaching Anthropic:', networkErr.message);
+    ({ lastResponse, allSources } = await runAgenticLoop(enrichedMessages));
+  } catch (err) {
+    console.error('[UrbanAI] Agentic loop error:', err.message);
     return jsonResponse(
-      { error: 'Network error reaching Anthropic API', detail: networkErr.message },
-      502
+      { error: err.message || 'Internal server error', status: err.status || 500 },
+      err.status || 500
     );
   }
 
-  // Handle Anthropic error responses
-  if (!anthropicRes.ok) {
-    let detail = '';
-    try {
-      const errBody = await anthropicRes.json();
-      detail = errBody?.error?.message || JSON.stringify(errBody);
-    } catch {
-      detail = await anthropicRes.text();
-    }
-    console.error(`[UrbanAI] Anthropic error ${anthropicRes.status}:`, detail);
-    return jsonResponse(
-      { error: 'Anthropic API error', status: anthropicRes.status, detail },
-      anthropicRes.status >= 400 && anthropicRes.status < 600 ? anthropicRes.status : 502
-    );
-  }
-
-  // Parse Anthropic response
-  let data;
-  try {
-    data = await anthropicRes.json();
-  } catch {
-    return jsonResponse({ error: 'Failed to parse Anthropic response' }, 502);
-  }
-
-  // Build clean response
-  const { text, sources } = parseAnthropicResponse(data);
+  // Build and return clean response
+  const text = extractText(lastResponse.content);
 
   return jsonResponse({
-    id: data.id,
-    model: data.model,
-    role: data.role,
-    stop_reason: data.stop_reason,
-    usage: data.usage,
-    // Full content blocks (for advanced clients that need tool details)
-    content: data.content,
-    // Convenience fields for simple frontend consumption
-    text,
-    sources,
-    // World Bank metadata (useful for frontend debug/display)
+    id:           lastResponse.id,
+    model:        lastResponse.model,
+    role:         lastResponse.role,
+    stop_reason:  lastResponse.stop_reason,
+    usage:        lastResponse.usage,
+    content:      lastResponse.content,  // full blocks for advanced clients
+    text,                                 // assembled final answer text
+    sources:      allSources,             // web sources used
     worldBankData: worldBankData ?? null,
   });
 }
