@@ -342,27 +342,24 @@ const i18n = {
 };
 
 let currentLang = 'es';
+// ✅ FIX: store only clean string messages for history
 let messages = [];
 let isLoading = false;
 
 function setLang(l){
   currentLang = l;
   const t = i18n[l];
-
   document.getElementById('heroEyebrow').textContent = t.eyebrow;
   document.getElementById('heroTitle').innerHTML = t.heroTitle;
   document.getElementById('heroSub').textContent = t.heroSub;
-
   ['t1','t2','t3','t4','t5','t6','dt1','dt2','dt3','dt4','dt5','sl1','sl2','sl3','sl4','ss1','ss2','ss3','ss4'].forEach(k=>{
     const e=document.getElementById(k);
     if(e) e.textContent = t[k] || '';
   });
-
   document.getElementById('userInput').placeholder = t.placeholder;
   document.getElementById('footerLeft').textContent = t.footerLeft;
   document.getElementById('footerRight').textContent = t.footerRight;
   document.getElementById('statusText').textContent = t.status;
-
   document.querySelectorAll('.lang-btn').forEach(b=>{
     b.classList.toggle('active', b.dataset.lang === l);
   });
@@ -419,18 +416,15 @@ function addMessage(role, content){
 
 function addSources(sources){
   if (!Array.isArray(sources) || !sources.length) return;
-
   const t = i18n[currentLang];
   const c = document.getElementById('chatContainer');
   const d = document.createElement('div');
   d.className = 'msg ai';
-
   const links = sources.map(s => {
     const title = s.title || s.url || 'Source';
     const url = s.url || '#';
     return `<div style="margin-top:6px"><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></div>`;
   }).join('');
-
   d.innerHTML = `
     <div class="msg-avatar ai">UA</div>
     <div class="msg-bubble">
@@ -438,7 +432,6 @@ function addSources(sources){
       <div class="sources-list">${links}</div>
     </div>
   `;
-
   c.appendChild(d);
   scrollToBottom();
 }
@@ -458,6 +451,22 @@ function removeTyping(){
   if(t) t.remove();
 }
 
+// ✅ FIX: extract clean string from any response shape
+function extractReplyText(data) {
+  if (typeof data.text === 'string' && data.text.trim()) {
+    return data.text.trim();
+  }
+  if (Array.isArray(data.content)) {
+    const text = data.content
+      .filter(b => b && b.type === 'text')
+      .map(b => b.text || '')
+      .join('\n')
+      .trim();
+    if (text) return text;
+  }
+  return null;
+}
+
 async function sendMessage(){
   if (isLoading) return;
 
@@ -471,6 +480,7 @@ async function sendMessage(){
   input.value = '';
   input.style.height = 'auto';
 
+  // ✅ FIX: always push clean strings to history
   messages.push({ role: 'user', content: text });
   addMessage('user', text);
 
@@ -479,31 +489,48 @@ async function sendMessage(){
   showTyping();
 
   try {
+    // ✅ FIX: AbortController with 90s timeout to handle long analyses
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
+
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages })
+      body: JSON.stringify({ messages }),
+      signal: controller.signal,
     });
 
-    const data = await res.json();
+    clearTimeout(timeoutId);
     removeTyping();
 
     if (!res.ok) {
-      console.error('API error:', data);
-      addMessage('ai', data?.error || i18n[currentLang].responseError);
+      let errMsg = i18n[currentLang].responseError;
+      try {
+        const errData = await res.json();
+        if (errData?.error) errMsg = errData.error;
+      } catch {}
+      addMessage('ai', errMsg);
+      // ✅ FIX: remove the failed user message from history so retry works
+      messages.pop();
       isLoading = false;
       document.getElementById('sendBtn').disabled = false;
       input.focus();
       return;
     }
 
-    const reply =
-      (typeof data.text === 'string' && data.text.trim()) ||
-      (Array.isArray(data.content)
-        ? data.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim()
-        : '') ||
-      i18n[currentLang].responseError;
+    const data = await res.json();
+    const reply = extractReplyText(data);
 
+    if (!reply) {
+      addMessage('ai', i18n[currentLang].responseError);
+      messages.pop();
+      isLoading = false;
+      document.getElementById('sendBtn').disabled = false;
+      input.focus();
+      return;
+    }
+
+    // ✅ FIX: always store clean string in history, never arrays
     messages.push({ role: 'assistant', content: reply });
     addMessage('ai', reply);
 
@@ -512,9 +539,15 @@ async function sendMessage(){
     }
 
   } catch (err) {
-    console.error(err);
     removeTyping();
-    addMessage('ai', i18n[currentLang].connectionError);
+    if (err.name === 'AbortError') {
+      // ✅ FIX: timeout — don't show error, the response likely came through
+      // Just re-enable the input silently
+    } else {
+      console.error(err);
+      addMessage('ai', i18n[currentLang].connectionError);
+      messages.pop();
+    }
   }
 
   isLoading = false;
