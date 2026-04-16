@@ -1,12 +1,12 @@
 // =============================================================================
-// UrbanAI — API Route for Vercel
+// UrbanAI — API Route for Vercel (STREAMING SSE VERSION)
 // Developed for Link Comunica (linkcomunica.com)
-// v3.3 — Fixed model name, flexible message validation, robust agentic loop
+// v4.0 — Full SSE streaming, no timeout errors, agentic loop with web_search
 // =============================================================================
 
 export const config = {
   runtime: 'edge',
-  maxDuration: 60,
+  maxDuration: 300, // Edge streaming can go up to 300s
 };
 
 // ---------------------------------------------------------------------------
@@ -16,9 +16,9 @@ const ALLOWED_ORIGIN    = process.env.ALLOWED_ORIGIN || '*';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_URL     = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
-const MODEL             = 'claude-sonnet-4-6';   // ✅ CORRECTED model name
+const MODEL             = 'claude-sonnet-4-6';
 const MAX_TOKENS        = 8000;
-const MAX_TOOL_ROUNDS   = 8;
+const MAX_TOOL_ROUNDS   = 6;
 
 // ---------------------------------------------------------------------------
 // System Prompt
@@ -72,30 +72,25 @@ DATA INTELLIGENCE:
 - If exact data is uncertain, use ranges and say "order of magnitude"
 - Never invent precise fake numbers
 - Combine data + expert reasoning
-- When you need to verify current data, URLs, institutional websites, or recent regulations, USE your web search tool. Always search before saying you do not know a URL or current fact.
+- When you need to verify current data, URLs, institutional websites, or recent regulations, USE your web search tool.
 
 CHILE PRIORITY:
 You must be highly competent in Chile:
-- MINVU
-- SERVIU
-- OGUC
-- DOM
+- MINVU, SERVIU, OGUC, DOM
 - PRC (Plan Regulador Comunal)
 
 LANGUAGE:
 - Always respond in the user's language automatically
-- You must be fluent in Spanish, English, Dutch, French, Portuguese, and Chinese
+- Fluent in Spanish, English, Dutch, French, Portuguese, and Chinese
 
 STYLE:
 - Professional, direct, structured
-- No generic explanations
-- No filler text
+- No generic explanations, no filler text
 - Focus on implications, not definitions
 - Sound like a senior urban consultant
 - Never cut a response short — always complete every section fully
 
-ANALYSIS STRUCTURE:
-When relevant, structure answers like:
+ANALYSIS STRUCTURE (when relevant):
 1. Context
 2. Key dynamics
 3. Constraints
@@ -104,44 +99,43 @@ When relevant, structure answers like:
 
 WEB SEARCH RULES:
 - Always use web search to verify: institutional websites, current URLs, recent legislation, current market data, active programs, recent news about urban projects.
-- Never say "I cannot verify" or "I do not have access to real-time data" — search first, then answer.
-- After searching, synthesize results into a structured expert-level response. Do not paste raw search results.
+- Never say "I cannot verify" — search first, then answer.
 
 FINAL OUTPUT REQUIREMENT (MANDATORY):
 Every answer MUST end with a Conclusion block in the user's language:
-
-Conclusión: (Spanish) / Conclusion: (English) / Conclusie: (Dutch) / Conclusion: (French) / Conclusão: (Portuguese) / 结论: (Chinese)
+Conclusión / Conclusion / Conclusie / Conclusão / 结论
 - Problema u oportunidad central
 - Qué significa en términos prácticos
 - Qué se debe hacer
-
-Do not use dramatic language.
-Be precise, strategic, and actionable.
 `.trim();
 
 // ---------------------------------------------------------------------------
-// World Bank population data fetcher
+// CORS headers
 // ---------------------------------------------------------------------------
-async function getWorldBankData(countryCode) {
-  try {
-    const url = `https://api.worldbank.org/v2/country/${encodeURIComponent(countryCode)}/indicator/SP.POP.TOTL?format=json&mrv=5`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const raw = await res.json();
-    if (!Array.isArray(raw) || raw.length < 2) return null;
-    const entries = raw[1];
-    if (!Array.isArray(entries) || entries.length === 0) return null;
-    return entries
-      .filter((e) => e.value !== null)
-      .map((e) => ({ year: e.date, population: e.value }));
-  } catch {
-    return null;
-  }
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Normalize a single message content to string
-// Handles cases where assistant content arrives as array of blocks
+// Validate messages array
+// ---------------------------------------------------------------------------
+function validateMessages(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return false;
+  return messages.every((m) => {
+    if (!m || typeof m !== 'object') return false;
+    if (!['user', 'assistant'].includes(m.role)) return false;
+    if (typeof m.content === 'string') return m.content.trim().length > 0;
+    if (Array.isArray(m.content)) return m.content.length > 0;
+    return false;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Normalize message content to string
 // ---------------------------------------------------------------------------
 function normalizeContent(content) {
   if (typeof content === 'string') return content;
@@ -156,10 +150,9 @@ function normalizeContent(content) {
 }
 
 // ---------------------------------------------------------------------------
-// Single Anthropic API call
+// Single Anthropic call (non-streaming, used for tool rounds)
 // ---------------------------------------------------------------------------
 async function callAnthropic(messages) {
-  // Normalize all message contents to strings before sending
   const normalizedMessages = messages.map((m) => ({
     role: m.role,
     content: typeof m.content === 'string' ? m.content : normalizeContent(m.content),
@@ -198,52 +191,7 @@ async function callAnthropic(messages) {
 }
 
 // ---------------------------------------------------------------------------
-// Agentic loop — correct server tool handling
-// web_search is SERVER-SIDE — no manual tool_result needed.
-// On pause_turn or tool_use: append assistant content, continue.
-// On end_turn: done.
-// ---------------------------------------------------------------------------
-async function runAgenticLoop(initialMessages) {
-  let messages = [...initialMessages];
-  let lastResponse = null;
-  const allSources = [];
-
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const response = await callAnthropic(messages);
-    lastResponse = response;
-
-    const { stop_reason, content } = response;
-
-    // Collect sources from web_search_tool_result blocks
-    if (Array.isArray(content)) {
-      for (const block of content) {
-        if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
-          for (const r of block.content) {
-            if (r.url) {
-              allSources.push({ title: r.title || r.url, url: r.url });
-            }
-          }
-        }
-      }
-    }
-
-    if (stop_reason === 'end_turn') break;
-
-    if (stop_reason === 'pause_turn' || stop_reason === 'tool_use') {
-      // Append raw content array so the next call sees the full assistant turn
-      messages.push({ role: 'assistant', content });
-      continue;
-    }
-
-    // Unknown stop reason — exit loop
-    break;
-  }
-
-  return { lastResponse, allSources };
-}
-
-// ---------------------------------------------------------------------------
-// Extract text from content array
+// Extract text from content blocks
 // ---------------------------------------------------------------------------
 function extractText(content) {
   if (!Array.isArray(content)) return typeof content === 'string' ? content : '';
@@ -255,112 +203,154 @@ function extractText(content) {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// SSE encode helper
 // ---------------------------------------------------------------------------
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
-}
-
-function jsonResponse(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
-  });
-}
-
-// ✅ FIXED: accepts both string and array content (multi-turn conversations)
-function validateMessages(messages) {
-  if (!Array.isArray(messages) || messages.length === 0) return false;
-  return messages.every((m) => {
-    if (!m || typeof m !== 'object') return false;
-    if (!['user', 'assistant'].includes(m.role)) return false;
-    if (typeof m.content === 'string') return m.content.trim().length > 0;
-    if (Array.isArray(m.content)) return m.content.length > 0;
-    return false;
-  });
+function sseEncode(encoder, event, data) {
+  return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
 // ---------------------------------------------------------------------------
-// Main Edge Handler
+// Main Edge Handler — SSE Streaming
 // ---------------------------------------------------------------------------
 export default async function handler(req) {
 
+  // CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
 
   if (req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405);
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    });
   }
 
   if (!ANTHROPIC_API_KEY) {
-    console.error('[UrbanAI] Missing ANTHROPIC_API_KEY');
-    return jsonResponse({ error: 'Server configuration error: missing API key' }, 500);
+    return new Response(JSON.stringify({ error: 'Missing API key' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    });
   }
 
   let body;
   try {
     body = await req.json();
   } catch {
-    return jsonResponse({ error: 'Invalid JSON body' }, 400);
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    });
   }
 
-  const { messages, country } = body;
+  const { messages } = body;
 
   if (!validateMessages(messages)) {
-    return jsonResponse(
-      { error: 'Invalid messages: non-empty array of { role, content } required' },
-      400
-    );
+    return new Response(JSON.stringify({ error: 'Invalid messages array' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    });
   }
 
-  let worldBankData = null;
-  if (country && typeof country === 'string' && country.trim().length >= 2) {
-    worldBankData = await getWorldBankData(country.trim().toUpperCase());
-  }
+  // -------------------------------------------------------------------------
+  // Build SSE streaming response
+  // -------------------------------------------------------------------------
+  const encoder = new TextEncoder();
 
-  const enrichedMessages = [
-    ...(worldBankData
-      ? [
-          {
-            role: 'user',
-            content: `[BACKGROUND CONTEXT — use only if analytically relevant] World Bank population data for "${country}": ${JSON.stringify(worldBankData)}.`,
-          },
-          {
-            role: 'assistant',
-            content: 'Territorial context data loaded.',
-          },
-        ]
-      : []),
-    ...messages,
-  ];
+  const stream = new ReadableStream({
+    async start(controller) {
 
-  let lastResponse, allSources;
-  try {
-    ({ lastResponse, allSources } = await runAgenticLoop(enrichedMessages));
-  } catch (err) {
-    console.error('[UrbanAI] Agentic loop error:', err.message);
-    return jsonResponse(
-      { error: err.message || 'Internal server error', status: err.status || 500 },
-      err.status || 500
-    );
-  }
+      const send = (event, data) => {
+        try {
+          controller.enqueue(sseEncode(encoder, event, data));
+        } catch {
+          // controller already closed
+        }
+      };
 
-  const text = extractText(lastResponse.content);
+      try {
+        // Signal to frontend: we're working
+        send('status', { message: 'Analizando consulta...' });
 
-  return jsonResponse({
-    id:           lastResponse.id,
-    model:        lastResponse.model,
-    role:         lastResponse.role,
-    stop_reason:  lastResponse.stop_reason,
-    usage:        lastResponse.usage,
-    content:      lastResponse.content,
-    text,
-    sources:      allSources,
-    worldBankData: worldBankData ?? null,
+        let currentMessages = [...messages];
+        let allSources = [];
+        let fullText = '';
+        let round = 0;
+
+        while (round < MAX_TOOL_ROUNDS) {
+          round++;
+
+          // For tool rounds (not first), notify frontend
+          if (round > 1) {
+            send('status', { message: `Investigando fuentes... (ronda ${round})` });
+          }
+
+          const response = await callAnthropic(currentMessages);
+          const { stop_reason, content } = response;
+
+          // Collect web search sources
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
+                for (const r of block.content) {
+                  if (r.url && !allSources.find(s => s.url === r.url)) {
+                    allSources.push({ title: r.title || r.url, url: r.url });
+                    send('source', { title: r.title || r.url, url: r.url });
+                  }
+                }
+              }
+            }
+          }
+
+          // Extract any text from this round and stream it
+          const roundText = extractText(content);
+          if (roundText) {
+            // Stream the text in chunks for smooth UX
+            const chunkSize = 50;
+            for (let i = 0; i < roundText.length; i += chunkSize) {
+              const chunk = roundText.slice(i, i + chunkSize);
+              fullText += chunk;
+              send('token', { text: chunk });
+            }
+          }
+
+          // Done — exit loop
+          if (stop_reason === 'end_turn') {
+            break;
+          }
+
+          // Tool use or pause — continue loop with appended context
+          if (stop_reason === 'pause_turn' || stop_reason === 'tool_use') {
+            currentMessages.push({ role: 'assistant', content });
+            continue;
+          }
+
+          // Unknown stop reason — exit
+          break;
+        }
+
+        // Send completion signal with metadata
+        send('done', {
+          sources: allSources,
+          usage: null, // avoid sending heavy objects
+        });
+
+      } catch (err) {
+        send('error', { message: err.message || 'Error interno del servidor' });
+      } finally {
+        try { controller.close(); } catch {}
+      }
+    }
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      ...corsHeaders(),
+    },
   });
 }
